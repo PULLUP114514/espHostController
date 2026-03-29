@@ -13,7 +13,7 @@ class Program
 				Console.TreatControlCAsInput = true;
 
 				SerialPort sp = new SerialPort(
-						"COM6",
+						"/dev/ttyACM0",
 						115200
 						);
 				sp.Open();
