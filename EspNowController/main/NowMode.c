@@ -19,12 +19,24 @@
 static void SendImg(void *pvParameters);
 /// @brief 线程安全的ACK标志位
 volatile bool ACKFlag = false;
+
+// 定义枚举类型 此枚举在esp-now和UART中通用
+typedef enum
+{
+        NOW_DETECT = 1,
+        NOW_DATAHEAD = 2,
+        NOW_DATABODY = 3,
+        NOW_DATATAIL = 4,
+        CONTOL_BRIGHTNESS = 128, // Operation Data 为一个int 代表目标屏幕亮度
+        CONTOL_EXIT = 5,         // 退出Drm_App
+} OPERATION_CODE_ENUM;
+
 typedef struct
 {
         uint8_t type; // 0=广播  1=单播
         uint32_t packageId;
         uint8_t payload[64];
-} packet_t;
+} packageBody_t;
 
 static uint8_t broadcastMac[] = {0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF};
 
@@ -33,7 +45,7 @@ static uint8_t discovered_macs[MAX_PEERS][6];
 static int discovered_count = 0;
 
 /* ===== 判断是否存在 ===== */
-static bool mac_exists(uint8_t *mac)
+static bool MacExists(uint8_t *mac)
 {
         for (int i = 0; i < discovered_count; i++)
         {
@@ -44,20 +56,20 @@ static bool mac_exists(uint8_t *mac)
 }
 
 /* ===== 添加设备 ===== */
-static bool add_mac(uint8_t *mac)
+static bool AddMac(uint8_t *mac)
 {
         if (discovered_count >= MAX_PEERS)
                 return false;
 
-        if (!mac_exists(mac))
+        if (!MacExists(mac))
         {
                 memcpy(discovered_macs[discovered_count], mac, 6);
                 discovered_count++;
                 esp_now_peer_info_t peer;
                 memcpy(peer.peer_addr, mac, 6);
-                peer.channel = CHANNEL;      // 0 表示当前信道（推荐）
-                peer.ifidx = ESPNOW_WIFI_IF; // 一般用 STA
-                peer.encrypt = false;        // 是否加密
+                peer.channel = CHANNEL;      // 当前信道
+                peer.ifidx = ESPNOW_WIFI_IF; // STA
+                peer.encrypt = false;
                 esp_now_add_peer(&peer);
                 ESP_LOGI(TAG, "发现新设备: " MACSTR, MAC2STR(mac));
                 return true;
@@ -67,7 +79,7 @@ static bool add_mac(uint8_t *mac)
 }
 
 /* ===== WiFi 初始化 ===== */
-static void wifi_init(void)
+static void InitWifi(void)
 {
         esp_netif_init();
         esp_event_loop_create_default();
@@ -82,11 +94,11 @@ static void wifi_init(void)
 }
 
 /* ===== 接收回调 ===== */
-static void recv_cb(const esp_now_recv_info_t *info, const uint8_t *data, int len)
+static void ReceiveCallBack(const esp_now_recv_info_t *info, const uint8_t *data, int len)
 {
         uint8_t *srcMac = info->src_addr;
-        packet_t *pkt = (packet_t *)data;
-        packet_t outpkt = {0};
+        packageBody_t *pkt = (packageBody_t *)data;
+        packageBody_t outpkt = {0};
         outpkt.packageId = 0;
         if (srcMac == NULL || data == NULL || len <= 0)
         {
@@ -96,7 +108,7 @@ static void recv_cb(const esp_now_recv_info_t *info, const uint8_t *data, int le
         {
                 /* 回发广播（让对方发现自己） */
                 ESP_LOGI(TAG, "收到广播来自: " MACSTR, MAC2STR(srcMac));
-                outpkt.type = 1;
+                outpkt.type = NOW_DETECT;
                 memcpy(outpkt.payload, "HELLO", 6);
                 esp_now_send(srcMac, (uint8_t *)&outpkt, sizeof(outpkt));
         }
@@ -104,6 +116,7 @@ static void recv_cb(const esp_now_recv_info_t *info, const uint8_t *data, int le
         {
                 ESP_LOGI(TAG, "收到单播来自: " MACSTR, MAC2STR(srcMac));
         }
+
         switch (pkt->type)
         {
         case 2:
@@ -117,7 +130,7 @@ static void recv_cb(const esp_now_recv_info_t *info, const uint8_t *data, int le
                 break;
         }
 
-        bool newMac = add_mac(srcMac);
+        bool newMac = AddMac(srcMac);
         if (newMac)
         {
                 xTaskCreate(
@@ -131,13 +144,14 @@ static void recv_cb(const esp_now_recv_info_t *info, const uint8_t *data, int le
         }
 }
 
+/* ===== 发送扩列图 ===== */
 static void SendImg(void *pvParameters)
 {
 
         uint8_t *mac = (uint8_t *)pvParameters;
         while (true)
         {
-                packet_t pkt = {0};
+                packageBody_t pkt = {0};
                 pkt.type = 2;
                 pkt.packageId = 0;
                 memcpy(pkt.payload, "GETGETGET12313123123", 21);
@@ -156,7 +170,7 @@ static void SendImg(void *pvParameters)
 }
 
 /* ===== 发送回调（可选） ===== */
-static void send_cb(const esp_now_send_info_t *info, esp_now_send_status_t status)
+static void SendCallBack(const esp_now_send_info_t *info, esp_now_send_status_t status)
 {
         if (info)
         {
@@ -166,12 +180,12 @@ static void send_cb(const esp_now_send_info_t *info, esp_now_send_status_t statu
 }
 
 /* ===== ESP-NOW 初始化 ===== */
-static void espnow_init(void)
+static void InitEspNow(void)
 {
         esp_now_init();
 
-        esp_now_register_recv_cb(recv_cb);
-        esp_now_register_send_cb(send_cb);
+        esp_now_register_recv_cb(ReceiveCallBack);
+        esp_now_register_send_cb(SendCallBack);
 
         /* 添加广播 peer */
         esp_now_peer_info_t peer = {0};
@@ -184,11 +198,11 @@ static void espnow_init(void)
 }
 
 /* ===== 广播任务 ===== */
-static void broadcast_task(void *arg)
+static void BroadcastTask(void *arg)
 {
         while (1)
         {
-                packet_t pkt = {0};
+                packageBody_t pkt = {0};
                 pkt.type = 0;
                 memcpy(pkt.payload, "DISCOVER", 9);
 
@@ -206,6 +220,7 @@ static void broadcast_task(void *arg)
 /* ===== 主入口 ===== */
 void StartEspNow(void)
 {
+
         /* NVS */
         esp_err_t ret = nvs_flash_init();
         if (ret == ESP_ERR_NVS_NO_FREE_PAGES)
@@ -214,8 +229,8 @@ void StartEspNow(void)
                 nvs_flash_init();
         }
 
-        wifi_init();
-        espnow_init();
+        InitWifi();
+        InitEspNow();
 
-        xTaskCreate(broadcast_task, "broadcast_task", 2048, NULL, 4, NULL);
+        xTaskCreate(BroadcastTask, "BroadcastTask", 2048, NULL, 4, NULL);
 }
