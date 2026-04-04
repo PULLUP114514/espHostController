@@ -1,14 +1,18 @@
 /*
- *   串口数据包格式：
- *   +-------------+-------------+------------------------------------------------------------------------------+-------------+-------------+
- *   |    HEAD0    |    HEAD1    |                                  (BODY)                                      |    TAIL0    |    TAIL0    |
- *   |    0xAA     |    0x55     |                                  (BODY)                                      |    0x0D     |    0x07     |
- *   +-------------+-------------+------------------------------------------------------------------------------+-------------+-------------+
- *                               +------------------+------------------+-------------------+--------------------+
- *                               |    Package ID    |  Operation Code  |  Operation size   |   Operation Data   |
- *                               |      uint32      |      uint8       |      uint 16      |    unsigned char   |
- *                               +------------------+------------------+-------------------+--------------------+
- *                                                                                             128 Bytes (Max)
+ *   串口数据帧格式：
+ *   +--------------+--------------+------------------------------------------------------------------------------+-------------+-------------+--------------+--------------+
+ *   |    HEAD 0    |    HEAD 1    |                                  (BODY)                                      |    CRC 0    |    CRC 1    |    TAIL 0    |    TAIL 1    |
+ *   |     0xAA     |     0x55     |                                  (BODY)                                      |     CRC     |     CRC     |     0x0D     |     0x07     |
+ *   +--------------+--------------+------------------------------------------------------------------------------+-------------+-------------+--------------+--------------+
+ *                                 +------------------+------------------+-------------------+--------------------+
+ *                                 |    Package ID    |  Operation Code  |  Operation size   |   Operation Data   |
+ *                                 |      uint32      |      uint8       |      uint 16      |    unsigned char   |
+ *                                 +------------------+------------------+-------------------+--------------------+
+ *                                                                                 |             512 Bytes (Max)
+ *                                 ^                                               |                    ^         ^
+ *                                 |                                               +--------------------+         |
+ *                                 +-------------------------------CRC Protected----------------------------------+
+ * Operation Code 见枚举
  */
 
 #include "driver/uart.h"
@@ -16,6 +20,7 @@
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 #include "NowMode.h"
+#include "TypeDef.h"
 
 #define UART_PORT UART_NUM_1
 #define TXD_PIN 4
@@ -24,42 +29,18 @@
 
 const char *TAG = "UART";
 
-// 状态机读取状态
-typedef enum
-{
-        HEAD0,
-        HEAD1,
-        BODY,
-        TAIL0,
-        TAIL1
-} FCMReadStatus;
-typedef enum
-{
-        HEAD0_TAG = 0xAA,
-        HEAD1_TAG = 0x55,
-        TAIL0_TAG = 0x0D,
-        TAIL1_TAG = 0x07
-} FCMTag;
-
-#pragma pack(push, 4) // 紧凑 1字节对齐
-
-typedef struct
-{
-        uint32_t packageID;
-        uint8_t OperationCode;
-        uint16_t OperationSize;
-        uint8_t OperationData;
-} BodyDef_t;
-
-#pragma pack(pop) // 恢复默认
-
-void F1CControlUartListen(void *pvParameters)
+void F1CControlUartListener(void *pvParameters)
 {
         uint8_t *data = (uint8_t *)malloc(BUF_SIZE);
-        uint8_t *bodyBuffer = (uint8_t *)malloc();
+        BodyDef_t bodyPackage = {0};
+        uint32_t bodyCount = 0;              // 指向当前 Body 的字节
+        uint16_t bodyOperationDataCount = 0; // 指向当前 OperationData 的字节
+        uint16_t bodyOperationDataSize = 0;  // 指向 OperationData 的总字节
+        uint16_t crcCode = 0;
         if (data == nullptr)
         {
                 ESP_LOGE(TAG, "Malloc Failed");
+                return;
         }
         FCMReadStatus status = HEAD0;
         while (1)
@@ -83,12 +64,66 @@ void F1CControlUartListen(void *pvParameters)
                                 break;
                         case HEAD1:
                                 if (data[i] == HEAD1_TAG)
+                                {
                                         status = BODY;
+                                        bodyCount = 0;
+                                        bodyOperationDataCount = 0;
+                                }
                                 break;
                         case BODY:
-
+                                memcpy((uint8_t)&bodyPackage + bodyCount, &(data[i]), 1);
+                                if (bodyCount == (sizeof(bodyPackage.packageID) + sizeof(bodyPackage.OperationCode) + sizeof(bodyPackage.OperationSize)))
+                                {
+                                        bodyOperationDataCount = 0;
+                                        bodyOperationDataSize = bodyPackage.OperationSize;
+                                        if (bodyOperationDataSize > 512)
+                                        {
+                                                status = HEAD0;
+                                        }
+                                }
+                                bodyCount++; // 后++
+                                if (bodyOperationDataCount > bodyOperationDataSize)
+                                {
+                                        status = CRC0;
+                                }
+                                break;
+                        case CRC0:
+                                crcCode = ((uint16_t)data[i] << 8);
+                                status = CRC1;
+                                break;
+                        case CRC1:
+                                crcCode |= ((uint16_t)data[i]);
+                                status = TAIL0;
+                                break;
+                        case TAIL0:
+                                if (data[i] == TAIL0_TAG)
+                                {
+                                        status = TAIL1;
+                                }
+                                else
+                                {
+                                        status = HEAD0;
+                                }
+                                break;
+                        case TAIL1:
+                                if (data[i] == TAIL1_TAG)
+                                {
+                                        status = SUCCESS;
+                                }
+                                else
+                                {
+                                        status = HEAD0;
+                                }
+                        }
+                        if (status == SUCCESS)
+                        {
                                 break;
                         }
+                }
+
+                if (status != SUCCESS)
+                {
+                        continue;
                 }
         }
         return;
@@ -111,6 +146,6 @@ void StartUart(void)
         uart_set_pin(UART_PORT, TXD_PIN, RXD_PIN, UART_PIN_NO_CHANGE, UART_PIN_NO_CHANGE);
         // Configure UART parameters
         ESP_ERROR_CHECK(uart_param_config(UART_PORT, &uart_config));
-        xTaskCreate(F1CControlUartListen, "F1CControlUartListen", 2048, NULL, 4, NULL);
+        xTaskCreate(F1CControlUartListener, "F1CControlUartListener", 2048, NULL, 4, NULL);
         return;
 }

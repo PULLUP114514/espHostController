@@ -10,37 +10,21 @@
 #include "esp_netif.h"
 #include "esp_event.h"
 #include "EspnowConfig.h"
-#define TAG "ESP_DISCOVER"
+#include "TypeDef.h"
+
+const char *TAG = "ESP_DISCOVER";
 
 #define CHANNEL 1
 #define SEND_INTERVAL 1000
 #define MAX_PEERS 20
 
 static void SendImg(void *pvParameters);
-/// @brief 线程安全的ACK标志位
+
+/// 线程安全的ACK标志位
 volatile bool ACKFlag = false;
-
-// 定义枚举类型 此枚举在esp-now和UART中通用
-typedef enum
-{
-        NOW_DETECT = 1,
-        NOW_DATAHEAD = 2,
-        NOW_DATABODY = 3,
-        NOW_DATATAIL = 4,
-        CONTOL_BRIGHTNESS = 128, // Operation Data 为一个int 代表目标屏幕亮度
-        CONTOL_EXIT = 5,         // 退出Drm_App
-} OPERATION_CODE_ENUM;
-
-typedef struct
-{
-        uint8_t type; // 0=广播  1=单播
-        uint32_t packageId;
-        uint8_t payload[64];
-} packageBody_t;
-
 static uint8_t broadcastMac[] = {0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF};
 
-/* ===== 设备列表 ===== */
+// 设备列表
 static uint8_t discovered_macs[MAX_PEERS][6];
 static int discovered_count = 0;
 
