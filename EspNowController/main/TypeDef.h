@@ -9,9 +9,10 @@
 typedef enum
 {
         NOW_DETECT = 1,
-        NOW_DATAHEAD = 2,
-        NOW_DATABODY = 3,
-        NOW_DATATAIL = 4,
+        IMG_DATAHEAD = 2,
+        IMG_DATABODY = 3,
+        IMG_DATATAIL = 4,
+        REQ_IMG = 5,             // 此功能仅在UART中使用
         CONTOL_BRIGHTNESS = 128, // Operation Data 为一个int 代表目标屏幕亮度
         CONTOL_EXIT = 5,         // 退出Drm_App
 } OPERATION_CODE_ENUM;

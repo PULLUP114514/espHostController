@@ -26,9 +26,29 @@
 #define TXD_PIN 4
 #define RXD_PIN 5
 #define BUF_SIZE 1024
-
+#define BODY_HEADER_SIZE (sizeof(bodyPackage.packageID) +     \
+                          sizeof(bodyPackage.OperationCode) + \
+                          sizeof(bodyPackage.OperationSize))
 const char *TAG = "UART";
+uint16_t CRC16Check(const uint8_t *data, uint16_t size)
+{
+        uint16_t crc = 0xFFFF;
 
+        for (uint16_t i = 0; i < size; i++)
+        {
+                crc ^= data[i];
+
+                for (uint8_t j = 0; j < 8; j++)
+                {
+                        if (crc & 0x0001)
+                                crc = (crc >> 1) ^ 0xA001;
+                        else
+                                crc >>= 1;
+                }
+        }
+
+        return crc;
+}
 void F1CControlUartListener(void *pvParameters)
 {
         uint8_t *data = (uint8_t *)malloc(BUF_SIZE);
@@ -54,11 +74,16 @@ void F1CControlUartListener(void *pvParameters)
                 }
 
                 // FCM
-                for (uint8_t i = 0; i < BUF_SIZE; i++)
+                for (uint8_t i = 0; i < len; i++)
                 {
                         switch (status)
                         {
                         case HEAD0:
+                                // clean
+                                bodyCount = 0;
+                                memset(&bodyPackage, 0, sizeof(BodyDef_t));
+                                bodyOperationDataSize = 0;
+                                bodyOperationDataCount = 0;
                                 if (data[i] == HEAD0_TAG)
                                         status = HEAD1;
                                 break;
@@ -69,8 +94,21 @@ void F1CControlUartListener(void *pvParameters)
                                         bodyCount = 0;
                                         bodyOperationDataCount = 0;
                                 }
+                                else if (data[i] == HEAD0_TAG)
+                                {
+                                        status = HEAD1; // 重同步
+                                }
+                                else
+                                {
+                                        status = HEAD0;
+                                }
                                 break;
                         case BODY:
+                                if (bodyCount >= sizeof(bodyPackage))
+                                {
+                                        status = HEAD0;
+                                        break;
+                                }
                                 memcpy((uint8_t)&bodyPackage + bodyCount, &(data[i]), 1);
                                 if (bodyCount == (sizeof(bodyPackage.packageID) + sizeof(bodyPackage.OperationCode) + sizeof(bodyPackage.OperationSize)))
                                 {
@@ -81,8 +119,12 @@ void F1CControlUartListener(void *pvParameters)
                                                 status = HEAD0;
                                         }
                                 }
+                                if (bodyCount >= BODY_HEADER_SIZE)
+                                {
+                                        bodyOperationDataCount++;
+                                }
                                 bodyCount++; // 后++
-                                if (bodyOperationDataCount > bodyOperationDataSize)
+                                if (bodyOperationDataCount >= bodyOperationDataSize)
                                 {
                                         status = CRC0;
                                 }
@@ -93,7 +135,16 @@ void F1CControlUartListener(void *pvParameters)
                                 break;
                         case CRC1:
                                 crcCode |= ((uint16_t)data[i]);
-                                status = TAIL0;
+                                // Check CRC
+                                if (CRC16Check(((uint8_t *)&bodyPackage), BODY_HEADER_SIZE + bodyOperationDataSize) == crcCode)
+                                {
+                                        status = TAIL0;
+                                }
+                                else
+                                {
+                                        status = HEAD0;
+                                }
+
                                 break;
                         case TAIL0:
                                 if (data[i] == TAIL0_TAG)
@@ -125,6 +176,22 @@ void F1CControlUartListener(void *pvParameters)
                 {
                         continue;
                 }
+                // TODO
+        }
+        return;
+}
+
+void UartMessageProcesser(BodyDef_t *bodyMessage)
+{
+        if (bodyMessage == NULL)
+        {
+                return;
+        }
+        switch (bodyMessage->OperationCode)
+        {
+        case IMG_DATAHEAD:
+                
+                break;
         }
         return;
 }
