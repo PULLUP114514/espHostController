@@ -109,7 +109,7 @@ void F1CControlUartListener(void *pvParameters)
                                         status = HEAD0;
                                         break;
                                 }
-                                memcpy((uint8_t)&bodyPackage + bodyCount, &(data[i]), 1);
+                                ((uint8_t *)&bodyPackage)[bodyCount] = data[i];
                                 if (bodyCount == (sizeof(bodyPackage.packageID) + sizeof(bodyPackage.OperationCode) + sizeof(bodyPackage.OperationSize)))
                                 {
                                         bodyOperationDataCount = 0;
@@ -165,6 +165,10 @@ void F1CControlUartListener(void *pvParameters)
                                 {
                                         status = HEAD0;
                                 }
+                                break;
+                        case SUCCESS:
+                                status = HEAD0;
+                                break;
                         }
                         if (status == SUCCESS)
                         {
@@ -190,7 +194,7 @@ void UartMessageProcesser(BodyDef_t *bodyMessage)
         switch (bodyMessage->OperationCode)
         {
         case IMG_DATAHEAD:
-                
+
                 break;
         }
         return;

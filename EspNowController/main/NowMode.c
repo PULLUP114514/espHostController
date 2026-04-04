@@ -12,7 +12,7 @@
 #include "EspnowConfig.h"
 #include "TypeDef.h"
 
-const char *TAG = "ESP_DISCOVER";
+#define TAG "ESP_DISCOVER"
 
 #define CHANNEL 1
 #define SEND_INTERVAL 1000

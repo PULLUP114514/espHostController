@@ -2,6 +2,7 @@
 #include <time.h>
 #include <string.h>
 #include <assert.h>
+#include "TypeDef.h"
 #include "NowMode.h"
 #include "F1CUart.h"
 void app_main(void)
