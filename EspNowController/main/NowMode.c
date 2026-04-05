@@ -20,7 +20,7 @@
 
 static void SendImg(void *pvParameters);
 
-/// 线程安全的ACK标志位
+/// @brief 线程安全的ACK标志位
 volatile bool ACKFlag = false;
 static uint8_t broadcastMac[] = {0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF};
 
@@ -153,7 +153,7 @@ static void SendImg(void *pvParameters)
         vTaskDelete(NULL);
 }
 
-/* ===== 发送回调（可选） ===== */
+/* ===== 发送回调 ===== */
 static void SendCallBack(const esp_now_send_info_t *info, esp_now_send_status_t status)
 {
         if (info)

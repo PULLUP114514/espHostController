@@ -6,9 +6,9 @@
  *   +--------------+--------------+------------------------------------------------------------------------------+-------------+-------------+--------------+--------------+
  *                                 +------------------+------------------+-------------------+--------------------+
  *                                 |    Package ID    |  Operation Code  |  Operation size   |   Operation Data   |
- *                                 |      uint32      |      uint8       |      uint 16      |    unsigned char   |
+ *                                 |      uint 32     |      uint 8      |      uint 16      |    unsigned char   |
  *                                 +------------------+------------------+-------------------+--------------------+
- *                                                                                 |             512 Bytes (Max)
+ *                                     Not yet used                                |             512 Bytes (Max)
  *                                 ^                                               |                    ^         ^
  *                                 |                                               +--------------------+         |
  *                                 +-------------------------------CRC Protected----------------------------------+
@@ -21,15 +21,18 @@
 #include "freertos/task.h"
 #include "NowMode.h"
 #include "TypeDef.h"
+#include "freertos/portmacro.h"
 
 #define UART_PORT UART_NUM_1
 #define TXD_PIN 4
 #define RXD_PIN 5
 #define BUF_SIZE 1024
 #define BODY_HEADER_SIZE (sizeof(bodyPackage.packageID) +     \
-                          sizeof(bodyPackage.OperationCode) + \
-                          sizeof(bodyPackage.OperationSize))
+                          sizeof(bodyPackage.operationCode) + \
+                          sizeof(bodyPackage.operationSize))
 const char *TAG = "UART";
+int8_t UartMessageProcesser(BodyDef_t *bodyMessage);
+
 uint16_t CRC16Check(const uint8_t *data, uint16_t size)
 {
         uint16_t crc = 0xFFFF;
@@ -54,12 +57,12 @@ void F1CControlUartListener(void *pvParameters)
         uint8_t *data = (uint8_t *)malloc(BUF_SIZE);
         BodyDef_t bodyPackage = {0};
         uint32_t bodyCount = 0;              // 指向当前 Body 的字节
-        uint16_t bodyOperationDataCount = 0; // 指向当前 OperationData 的字节
-        uint16_t bodyOperationDataSize = 0;  // 指向 OperationData 的总字节
+        uint16_t bodyOperationDataCount = 0; // 指向当前 operationData 的字节
+        uint16_t bodyOperationDataSize = 0;  // 指向 operationData 的总字节
         uint16_t crcCode = 0;
         if (data == nullptr)
         {
-                ESP_LOGE(TAG, "Malloc Failed");
+                ESP_LOGE(TAG, "Malloc Failed. At pos: %s %s", __FILE__, __LINE__);
                 return;
         }
         FCMReadStatus status = HEAD0;
@@ -110,10 +113,10 @@ void F1CControlUartListener(void *pvParameters)
                                         break;
                                 }
                                 ((uint8_t *)&bodyPackage)[bodyCount] = data[i];
-                                if (bodyCount == (sizeof(bodyPackage.packageID) + sizeof(bodyPackage.OperationCode) + sizeof(bodyPackage.OperationSize)))
+                                if (bodyCount == (sizeof(bodyPackage.packageID) + sizeof(bodyPackage.operationCode) + sizeof(bodyPackage.operationSize)))
                                 {
                                         bodyOperationDataCount = 0;
-                                        bodyOperationDataSize = bodyPackage.OperationSize;
+                                        bodyOperationDataSize = bodyPackage.operationSize;
                                         if (bodyOperationDataSize > 512)
                                         {
                                                 status = HEAD0;
@@ -184,19 +187,94 @@ void F1CControlUartListener(void *pvParameters)
         }
         return;
 }
-
-void UartMessageProcesser(BodyDef_t *bodyMessage)
+int8_t UartMessageProcesser(BodyDef_t *bodyMessage)
 {
         if (bodyMessage == NULL)
         {
                 return;
         }
-        switch (bodyMessage->OperationCode)
+        switch (bodyMessage->operationCode)
         {
         case IMG_DATAHEAD:
+                memcpy(&selfImgSize, bodyMessage->operationData, sizeof(selfImgSize));
 
+                // 尝试释放旧的
+                if (selfImgPtr == NULL)
+                {
+                        free(selfImgPtr);
+                        selfImgPtr = NULL;
+                }
+
+                // 重新获取新的
+                selfImgPtr = (uint8_t *)malloc(selfImgSize);
+                if (selfImgPtr == NULL)
+                {
+                        ESP_LOGE(TAG, "malloc selfImgPtr failed. At pos: %s %s", __FILE__, __LINE__); // 操 是不是没开SPIRAM
+                        return -1;
+                }
+                break;
+        case IMG_DATABODY:
+                uint32_t currentOffset = 0;
+                memcpy(&currentOffset, bodyMessage->operationData, sizeof(uint32_t));
+                if (bodyMessage->operationSize < sizeof(uint32_t))
+                {
+                        ESP_LOGE(TAG, "Valid Position. At pos: %s %s", __FILE__, __LINE__);
+                }
+                // 我会一直监视你的
+                if (currentOffset + bodyMessage->operationSize - sizeof(uint32_t) > selfImgSize)
+                {
+                        ESP_LOGE(TAG, "Valid Offset. At pos: %s %s", __FILE__, __LINE__);
+                }
+                memcpy(selfImgPtr + currentOffset,
+                       bodyMessage->operationData + sizeof(uint32_t),
+                       bodyMessage->operationSize - sizeof(uint32_t));
+                break;
+        case IMG_DATATAIL:
                 break;
         }
+
+        return 1;
+}
+
+/// @brief 万一以后要用呢:D
+portMUX_TYPE uartSenderMux = portMUX_INITIALIZER_UNLOCKED;
+uint32_t uartSenderPackageID = 0;
+void UartSender(const uint8_t operationCode, const uint16_t operationSize, const void *operationData)
+{
+        uint32_t frameSize = operationSize + 6 + sizeof(uint32_t) + sizeof(uint8_t) + sizeof(uint16_t);
+        uint8_t *fullFrame = malloc(frameSize);
+        if (fullFrame == NULL)
+        {
+                ESP_LOGE(TAG, "malloc fullFrame failed. At pos: %s %s", __FILE__, __LINE__);
+                return;
+        }
+
+        if (operationSize > MAX_OPERATIONDATA_SIZE)
+        {
+                ESP_LOGE("operationSize TOO LARGE. At pos: %s %s", __FILE__, __LINE__);
+                return;
+        }
+
+        fullFrame[0] = 0xAA;
+        fullFrame[1] = 0xAA;
+
+        // 主！体！                     此处不拷贝packageID
+        fullFrame[2] = 0;
+        fullFrame[3] = 0;
+
+        memcpy(fullFrame + 2 + sizeof(uint32_t), &operationCode, sizeof(uint8_t));
+        memcpy(fullFrame + 2 + sizeof(uint32_t) + sizeof(uint8_t), &operationSize, sizeof(uint16_t));
+        if (operationSize > 0)
+        {
+                memcpy(fullFrame + 2 + sizeof(uint32_t) + sizeof(uint8_t) + sizeof(uint16_t), operationData, operationSize);
+        }
+        uint16_t crc = CRC16Check(fullFrame + 2, frameSize - 6);
+
+        fullFrame[operationSize + 3 + sizeof(uint32_t) + sizeof(uint8_t) + sizeof(uint16_t)] = (uint8_t)(crc & 0x00FF);
+        fullFrame[operationSize + 2 + sizeof(uint32_t) + sizeof(uint8_t) + sizeof(uint16_t)] = (uint8_t)(crc & 0xFF00);
+        fullFrame[operationSize + 4 + sizeof(uint32_t) + sizeof(uint8_t) + sizeof(uint16_t)] = 0x0D;
+        fullFrame[operationSize + 5 + sizeof(uint32_t) + sizeof(uint8_t) + sizeof(uint16_t)] = 0x07;
+        uart_write_bytes(UART_PORT, fullFrame, frameSize);
         return;
 }
 
