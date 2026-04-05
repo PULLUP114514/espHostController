@@ -3,7 +3,7 @@
   "idf.openOcdConfigs": [
     "board/esp32s3-builtin.cfg"
   ],
-  "idf.port": "detect",
+  "idf.port": "/dev/ttyACM0",
   "idf.currentSetup": "/home/bsodwtpc/myProg/ESP-IDF/v6.0/esp-idf",
   "idf.customExtraVars": {
     "IDF_TARGET": "esp32s3"
@@ -13,5 +13,6 @@
     "--background-index",
     "--query-driver=**",
     "--compile-commands-dir=/home/bsodwtpc/myFiles/Proj/ePass/espnow-mult/build"
-  ]
+  ],
+  "idf.flashType": "JTAG"
 }

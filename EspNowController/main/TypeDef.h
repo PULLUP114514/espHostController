@@ -1,3 +1,4 @@
+
 #ifndef __TYPEDEF_H__
 #define __TYPEDEF_H__
 
@@ -46,6 +47,11 @@ typedef enum
         TAIL1_TAG = 0x07
 } FCMTag;
 
+extern uint8_t *selfImgPtr;
+extern uint32_t selfImgSize;
+extern uint32_t otherImgSize;
+extern uint8_t *otherImgPtr;
+
 #define MAX_OPERATIONDATA_SIZE 512
 
 #pragma pack(push, 1) // 紧凑 1字节对齐
@@ -60,9 +66,4 @@ typedef struct
 
 #pragma pack(pop) // 恢复默认
 
-uint8_t *selfImgPtr = NULL;
-uint32_t selfImgSize = 0;
-
-uint32_t otherImgSize = 0;
-uint8_t otherImgPtr = NULL;
 #endif
