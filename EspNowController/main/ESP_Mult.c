@@ -6,6 +6,7 @@
 #include "esp_heap_caps.h"
 #include "esp_psram.h"
 #include "esp_log.h"
+#include "esp_task_wdt.h"
 
 #include "TypeDef.h"
 #include "NowMode.h"
@@ -36,6 +37,8 @@ void check_psram(void)
 }
 void app_main(void)
 {
+
+    esp_task_wdt_deinit();
     check_psram();
     StartUart();
     StartEspNow();

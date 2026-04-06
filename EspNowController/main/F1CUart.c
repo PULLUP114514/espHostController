@@ -32,6 +32,7 @@
                           sizeof(bodyPackage.operationSize))
 const char *TAG = "UART";
 int8_t UartMessageProcesser(BodyDef_t *bodyMessage);
+void UartSender(const uint8_t operationCode, const uint16_t operationSize, const void *operationData);
 
 void printHex(const uint8_t *data, uint32_t size)
 {
@@ -55,6 +56,8 @@ void printHex(const uint8_t *data, uint32_t size)
 }
 uint16_t CRC16Check(const uint8_t *data, uint16_t size)
 {
+        printf("\nCheck: ");
+        // printHex(data, size);
         uint16_t crc = 0xFFFF;
 
         for (uint16_t i = 0; i < size; i++)
@@ -76,13 +79,11 @@ void F1CControlUartListener(void *pvParameters)
 {
         uint8_t *data = (uint8_t *)malloc(BUF_SIZE);
         BodyDef_t bodyPackage = {0};
-        uint32_t bodyCount = 0;              // 指向当前 Body 的字节
         uint16_t bodyOperationDataCount = 0; // 指向当前 operationData 的字节
-        uint16_t bodyOperationDataSize = 0;  // 指向 operationData 的总字节
         uint16_t crcCode = 0;
         if (data == nullptr)
         {
-                ESP_LOGE(TAG, "Malloc Failed. At pos: %s %s", __FILENAME__, __LINE__);
+                ESP_LOGE(TAG, "Malloc Failed. At pos: %s %d", __FILENAME__, __LINE__);
                 return;
         }
         FCMReadStatus status = HEAD0;
@@ -90,31 +91,24 @@ void F1CControlUartListener(void *pvParameters)
         int len = 0;
         while (1)
         {
-
-                if (i >= len)
+                len = uart_read_bytes(UART_PORT, data, BUF_SIZE, 20 / portTICK_PERIOD_MS);
+                if (len < 1)
                 {
-                        i = 0;
-                        memset(&bodyPackage, 0, sizeof(BodyDef_t));
-                        len = uart_read_bytes(UART_PORT, data, BUF_SIZE, 20 / portTICK_PERIOD_MS);
-                        if (len < 1)
-                        {
-                                // delay 100ms
-                                vTaskDelay(100 / portTICK_PERIOD_MS);
-                                continue;
-                        }
+                        // delay 100ms
+                        vTaskDelay(100 / portTICK_PERIOD_MS);
+                        continue;
                 }
-                // FCM
-                for (; i < len; i++)
+                // FSM
+                for (i = 0; i < len; i++)
                 {
+
                         switch (status)
                         {
                         case HEAD0:
                                 if (data[i] == HEAD0_TAG)
                                 {
                                         // clean
-                                        bodyCount = 0;
                                         memset(&bodyPackage, 0, sizeof(BodyDef_t));
-                                        bodyOperationDataSize = 0;
                                         bodyOperationDataCount = 0;
                                         status = HEAD1;
                                 }
@@ -122,52 +116,68 @@ void F1CControlUartListener(void *pvParameters)
                         case HEAD1:
                                 if (data[i] == HEAD1_TAG)
                                 {
-                                        status = BODY;
-                                        bodyOperationDataSize = 512;
-                                        bodyCount = 0;
-                                        bodyOperationDataCount = 0;
+                                        status = BODY_ID0;
                                 }
                                 else if (data[i] == HEAD0_TAG)
                                 {
-                                        status = HEAD1; // 重同步
+                                        status = HEAD1; // 重同步5
                                 }
                                 else
                                 {
                                         status = HEAD0;
                                 }
                                 break;
-                        case BODY:
-                                if (bodyCount >= sizeof(bodyPackage))
-                                {
-                                        status = HEAD0;
-                                        break;
-                                }
-                                ((uint8_t *)&bodyPackage)[bodyCount] = data[i];
-                                if (bodyCount == BODY_HEADER_SIZE - 1)
-                                {
-                                        bodyOperationDataCount = 0;
-                                        bodyOperationDataSize = bodyPackage.operationSize;
-                                        if (bodyOperationDataSize > 512)
-                                        {
-                                                status = HEAD0;
-                                        }
-                                        if (bodyOperationDataSize == 0)
-                                        {
-                                                status = CRC0;
-                                                crcCode = 0;
-                                                break;
-                                        }
-                                }
-                                if (bodyOperationDataCount >= bodyOperationDataSize)
+                        case BODY_ID0:
+                                ((uint8_t *)&bodyPackage)[0] = data[i];
+                                status = BODY_ID1;
+                                break;
+                        case BODY_ID1:
+                                ((uint8_t *)&bodyPackage)[1] = data[i];
+                                status = BODY_ID2;
+                                break;
+                        case BODY_ID2:
+                                ((uint8_t *)&bodyPackage)[2] = data[i];
+                                status = BODY_ID3;
+                                break;
+                        case BODY_ID3:
+                                ((uint8_t *)&bodyPackage)[3] = data[i];
+                                status = BODY_CODE;
+                                break;
+                        case BODY_CODE:
+                                ((uint8_t *)&bodyPackage)[4] = data[i];
+                                status = BODY_SIZE0;
+                                break;
+                        case BODY_SIZE0:
+                                ((uint8_t *)&bodyPackage)[5] = data[i];
+                                status = BODY_SIZE1;
+                                break;
+                        case BODY_SIZE1:
+                                ((uint8_t *)&bodyPackage)[6] = data[i];
+                                if (bodyPackage.operationSize == 0)
                                 {
                                         status = CRC0;
-                                        crcCode = 0;
-                                        break;
                                 }
-
+                                else if (bodyPackage.operationSize > MAX_OPERATIONDATA_SIZE)
+                                {
+                                        status = HEAD0;
+                                }
+                                else
+                                {
+                                        bodyOperationDataCount = 0;
+                                        status = BODY_PAYLOAD;
+                                }
+                                break;
+                        case BODY_PAYLOAD:
+                                if (7 + bodyOperationDataCount > MAX_OPERATIONDATA_SIZE - 1)
+                                {
+                                        status = HEAD0;
+                                }
+                                ((uint8_t *)&bodyPackage)[7 + bodyOperationDataCount] = data[i];
                                 bodyOperationDataCount++;
-
-                                bodyCount++;
+                                if (bodyOperationDataCount >= bodyPackage.operationSize)
+                                {
+                                        status = CRC0;
+                                }
                                 break;
                         case CRC0:
                                 crcCode = ((uint16_t)data[i]);
@@ -176,13 +186,14 @@ void F1CControlUartListener(void *pvParameters)
                         case CRC1:
                                 crcCode |= ((uint16_t)data[i] << 8);
                                 // Check CRC
-                                uint16_t crctmp = CRC16Check(((uint8_t *)&bodyPackage), BODY_HEADER_SIZE + bodyOperationDataSize);
-                                if (CRC16Check(((uint8_t *)&bodyPackage), BODY_HEADER_SIZE + bodyOperationDataSize) == crcCode)
+                                uint16_t crcCalc = CRC16Check(((uint8_t *)&bodyPackage), BODY_HEADER_SIZE + bodyPackage.operationSize);
+                                if (crcCalc == crcCode)
                                 {
                                         status = TAIL0;
                                 }
                                 else
                                 {
+                                        ESP_LOGE(TAG, "CRC FAILED: excetped is : %02X, but got: %02X", crcCalc, crcCode);
                                         status = HEAD0;
                                 }
 
@@ -200,42 +211,30 @@ void F1CControlUartListener(void *pvParameters)
                         case TAIL1:
                                 if (data[i] == TAIL1_TAG)
                                 {
-                                        status = SUCCESS;
+                                        UartMessageProcesser(&bodyPackage);
+                                        memset(&bodyPackage, 0, sizeof(BodyDef_t));
                                 }
-                                else
-                                {
-                                        status = HEAD0;
-                                }
-                                break;
-                        case SUCCESS:
                                 status = HEAD0;
                                 break;
                         }
-                        if (status == SUCCESS)
-                        {
-                                break;
-                        }
                 }
-
-                if (status != SUCCESS)
-                {
-                        continue;
-                }
-                UartMessageProcesser(&bodyPackage);
+                memset(data, 0, BUF_SIZE);
         }
         return;
 }
+
 int8_t UartMessageProcesser(BodyDef_t *bodyMessage)
 {
         if (bodyMessage == NULL)
         {
                 return -1;
         }
-        ESP_LOGD(TAG, "Get ID: %d", bodyMessage->packageID);
+        ESP_LOGI(TAG, "Get Code: %d", bodyMessage->operationCode);
+        UartSender(ACK, 0, NULL);
         switch (bodyMessage->operationCode)
         {
         case IMG_DATAHEAD:
-                memcpy(&selfImgSize, bodyMessage->operationData, sizeof(selfImgSize));
+                memcpy(&selfImgSize, bodyMessage->operationData + sizeof(uint8_t), sizeof(selfImgSize));
 
                 // 尝试释放旧的
                 if (selfImgPtr == NULL)
@@ -245,11 +244,15 @@ int8_t UartMessageProcesser(BodyDef_t *bodyMessage)
                 }
 
                 // 重新获取新的
-                selfImgPtr = (uint8_t *)malloc(selfImgSize);
+                selfImgPtr = (uint8_t *)heap_caps_malloc(selfImgSize, MALLOC_CAP_SPIRAM);
                 if (selfImgPtr == NULL)
                 {
-                        ESP_LOGE(TAG, "malloc selfImgPtr failed. At pos: %s %s", __FILENAME__, __LINE__); // 操 是不是没开SPIRAM
+                        ESP_LOGE(TAG, "malloc selfImgPtr failed, size: %d. At pos: %s %d", selfImgSize, __FILENAME__, __LINE__); // 操 是不是没开SPIRAM
                         return -1;
+                }
+                else
+                {
+                        ESP_LOGI(TAG, "malloc selfImgPtr success, size: %d", selfImgSize);
                 }
                 break;
         case IMG_DATABODY:
@@ -257,12 +260,14 @@ int8_t UartMessageProcesser(BodyDef_t *bodyMessage)
                 memcpy(&currentOffset, bodyMessage->operationData, sizeof(uint32_t));
                 if (bodyMessage->operationSize < sizeof(uint32_t))
                 {
-                        ESP_LOGE(TAG, "Valid Position. At pos: %s %s", __FILENAME__, __LINE__);
+                        ESP_LOGE(TAG, "Valid Position. At pos: %s %d", __FILENAME__, __LINE__);
+                        return -1;
                 }
                 // 我会一直监视你的
                 if (currentOffset + bodyMessage->operationSize - sizeof(uint32_t) > selfImgSize)
                 {
-                        ESP_LOGE(TAG, "Valid Offset. At pos: %s %s", __FILENAME__, __LINE__);
+                        ESP_LOGE(TAG, "Valid Offset. At pos: %s %d", __FILENAME__, __LINE__);
+                        return -1;
                 }
                 memcpy(selfImgPtr + currentOffset,
                        bodyMessage->operationData + sizeof(uint32_t),
@@ -276,22 +281,21 @@ int8_t UartMessageProcesser(BodyDef_t *bodyMessage)
         return 0;
 }
 
-/// @brief 万一以后要用呢:D
-portMUX_TYPE uartSenderMux = portMUX_INITIALIZER_UNLOCKED;
 uint32_t uartSenderPackageID = 0;
 void UartSender(const uint8_t operationCode, const uint16_t operationSize, const void *operationData)
 {
+        ESP_LOGI(TAG, "SEND");
         uint32_t frameSize = operationSize + 6 + sizeof(uint32_t) + sizeof(uint8_t) + sizeof(uint16_t);
         uint8_t *fullFrame = malloc(frameSize);
         if (fullFrame == NULL)
         {
-                ESP_LOGI(TAG, "malloc fullFrame failed. At pos: %s %s", __FILENAME__, __LINE__);
+                ESP_LOGI(TAG, "malloc fullFrame failed. At pos: %s %d", __FILENAME__, __LINE__);
                 return;
         }
 
         if (operationSize > MAX_OPERATIONDATA_SIZE)
         {
-                ESP_LOGE(TAG, "operationSize TOO LARGE. At pos: %s %s", __FILENAME__, __LINE__);
+                ESP_LOGE(TAG, "operationSize TOO LARGE. At pos: %s %d", __FILENAME__, __LINE__);
                 return;
         }
 
@@ -309,11 +313,13 @@ void UartSender(const uint8_t operationCode, const uint16_t operationSize, const
                 memcpy(fullFrame + 2 + sizeof(uint32_t) + sizeof(uint8_t) + sizeof(uint16_t), operationData, operationSize);
         }
         uint16_t crc = CRC16Check(fullFrame + 2, frameSize - 6);
+        int crcOffset = operationSize + 2 + sizeof(uint32_t) + sizeof(uint8_t) + sizeof(uint16_t);
 
-        fullFrame[operationSize + 3 + sizeof(uint32_t) + sizeof(uint8_t) + sizeof(uint16_t)] = (uint8_t)(crc & 0x00FF);
-        fullFrame[operationSize + 2 + sizeof(uint32_t) + sizeof(uint8_t) + sizeof(uint16_t)] = (uint8_t)(crc & 0xFF00);
-        fullFrame[operationSize + 4 + sizeof(uint32_t) + sizeof(uint8_t) + sizeof(uint16_t)] = 0x0D;
-        fullFrame[operationSize + 5 + sizeof(uint32_t) + sizeof(uint8_t) + sizeof(uint16_t)] = 0x07;
+        fullFrame[crcOffset] = (uint8_t)(crc & 0xFF);   // 低位
+        fullFrame[crcOffset + 1] = (uint8_t)(crc >> 8); // 高位
+
+        fullFrame[crcOffset + 2] = 0x0D;
+        fullFrame[crcOffset + 3] = 0x07;
         uart_write_bytes(UART_PORT, fullFrame, frameSize);
         return;
 }
@@ -329,12 +335,21 @@ void StartUart(void)
             .data_bits = UART_DATA_8_BITS,
             .parity = UART_PARITY_DISABLE,
             .stop_bits = UART_STOP_BITS_1,
-            .flow_ctrl = UART_HW_FLOWCTRL_CTS_RTS,
+            .flow_ctrl = UART_HW_FLOWCTRL_DISABLE,
             .rx_flow_ctrl_thresh = 122,
         };
         uart_set_pin(UART_PORT, TXD_PIN, RXD_PIN, UART_PIN_NO_CHANGE, UART_PIN_NO_CHANGE);
         // Configure UART parameters
         ESP_ERROR_CHECK(uart_param_config(UART_PORT, &uart_config));
-        xTaskCreate(F1CControlUartListener, "F1CControlUartListener", 2048, NULL, 4, NULL);
+        xTaskCreatePinnedToCore(
+            F1CControlUartListener,
+            "F1CControlUartListener",
+            2048,
+            NULL,
+            1,
+            NULL,
+            0 // 绑定到 core0
+        );
+
         return;
 }

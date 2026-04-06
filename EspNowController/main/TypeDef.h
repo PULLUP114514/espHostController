@@ -17,7 +17,7 @@ typedef enum
         SEND_IMG = 6,            // uint32                              图片大小                                                  /
         CONTOL_BRIGHTNESS = 128, // int32                               目标屏幕亮度                                               /
         CONTOL_EXIT = 129,       // NULL                                /                                                       退出Drm_App
-        ACK = 256                // NULL                                /                                                       通用ACK
+        ACK = 255                // NULL                                /                                                       通用ACK
 } OPERATION_CODE_ENUM;
 
 typedef struct
@@ -32,12 +32,18 @@ typedef enum
 {
         HEAD0,
         HEAD1,
-        BODY,
+        BODY_ID0,
+        BODY_ID1,
+        BODY_ID2,
+        BODY_ID3,
+        BODY_CODE,
+        BODY_SIZE0,
+        BODY_SIZE1,
+        BODY_PAYLOAD,
         CRC0,
         CRC1,
         TAIL0,
-        TAIL1,
-        SUCCESS
+        TAIL1
 } FCMReadStatus;
 typedef enum
 {
