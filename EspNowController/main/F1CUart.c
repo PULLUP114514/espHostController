@@ -42,13 +42,11 @@ void printHex(const uint8_t *data, uint32_t size)
         for (uint32_t i = 0; i < size; i++)
         {
                 printf("%02X ", data[i]);
-                // 每16个字节换行一次，方便查看
                 if ((i + 1) % 16 == 0)
                 {
                         printf("\n");
                 }
         }
-        // 如果最后一行不足16字节，也换行
         if (size % 16 != 0)
         {
                 printf("\n");
@@ -56,8 +54,6 @@ void printHex(const uint8_t *data, uint32_t size)
 }
 uint16_t CRC16Check(const uint8_t *data, uint16_t size)
 {
-        printf("\nCheck: ");
-        // printHex(data, size);
         uint16_t crc = 0xFFFF;
 
         for (uint16_t i = 0; i < size; i++)
@@ -75,6 +71,7 @@ uint16_t CRC16Check(const uint8_t *data, uint16_t size)
 
         return crc;
 }
+
 void F1CControlUartListener(void *pvParameters)
 {
         uint8_t *data = (uint8_t *)malloc(BUF_SIZE);
@@ -229,7 +226,6 @@ int8_t UartMessageProcesser(BodyDef_t *bodyMessage)
         {
                 return -1;
         }
-        ESP_LOGI(TAG, "Get Code: %d", bodyMessage->operationCode);
         UartSender(ACK, 0, NULL);
         switch (bodyMessage->operationCode)
         {
@@ -274,7 +270,7 @@ int8_t UartMessageProcesser(BodyDef_t *bodyMessage)
                        bodyMessage->operationSize - sizeof(uint32_t));
                 break;
         case IMG_DATATAIL:
-                printHex(selfImgPtr, selfImgSize);
+                // printHex(selfImgPtr, selfImgSize);
                 break;
         }
 
@@ -284,7 +280,6 @@ int8_t UartMessageProcesser(BodyDef_t *bodyMessage)
 uint32_t uartSenderPackageID = 0;
 void UartSender(const uint8_t operationCode, const uint16_t operationSize, const void *operationData)
 {
-        ESP_LOGI(TAG, "SEND");
         uint32_t frameSize = operationSize + 6 + sizeof(uint32_t) + sizeof(uint8_t) + sizeof(uint16_t);
         uint8_t *fullFrame = malloc(frameSize);
         if (fullFrame == NULL)
