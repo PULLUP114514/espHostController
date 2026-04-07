@@ -1,8 +1,0 @@
-/home/bsodwtpc/myFiles/Proj/ePass/App/ipcController/build/CMakeFiles/my_lib.dir
-/home/bsodwtpc/myFiles/Proj/ePass/App/ipcController/build/CMakeFiles/IpcController.dir
-/home/bsodwtpc/myFiles/Proj/ePass/App/ipcController/build/CMakeFiles/edit_cache.dir
-/home/bsodwtpc/myFiles/Proj/ePass/App/ipcController/build/CMakeFiles/rebuild_cache.dir
-/home/bsodwtpc/myFiles/Proj/ePass/App/ipcController/build/CMakeFiles/list_install_components.dir
-/home/bsodwtpc/myFiles/Proj/ePass/App/ipcController/build/CMakeFiles/install.dir
-/home/bsodwtpc/myFiles/Proj/ePass/App/ipcController/build/CMakeFiles/install/local.dir
-/home/bsodwtpc/myFiles/Proj/ePass/App/ipcController/build/CMakeFiles/install/strip.dir
