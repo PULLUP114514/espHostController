@@ -81,9 +81,9 @@ static void InitWifi(void)
 static void ReceiveCallBack(const esp_now_recv_info_t *info, const uint8_t *data, int len)
 {
         uint8_t *srcMac = info->src_addr;
-        packageBody_t *pkt = (packageBody_t *)data;
-        packageBody_t outpkt = {0};
-        outpkt.packageId = 0;
+        BodyDef_t *pkt = (BodyDef_t *)data;
+        BodyDef_t outpkt = {0};
+        outpkt.packageID = 0;
         if (srcMac == NULL || data == NULL || len <= 0)
         {
                 return;
@@ -91,22 +91,22 @@ static void ReceiveCallBack(const esp_now_recv_info_t *info, const uint8_t *data
         if (IS_BROADCAST_ADDR(info->des_addr))
         {
                 /* 回发广播（让对方发现自己） */
-                ESP_LOGI(TAG, "收到广播来自: " MACSTR, MAC2STR(srcMac));
-                outpkt.type = NOW_DETECT;
-                memcpy(outpkt.payload, "HELLO", 6);
+                // ESP_LOGI(TAG, "收到广播来自: " MACSTR, MAC2STR(srcMac));
+                outpkt.operationCode = NOW_DETECT;
                 esp_now_send(srcMac, (uint8_t *)&outpkt, sizeof(outpkt));
         }
         else
         {
-                ESP_LOGI(TAG, "收到单播来自: " MACSTR, MAC2STR(srcMac));
+                // ESP_LOGI(TAG, "收到单播来自: " MACSTR, MAC2STR(srcMac));
         }
 
-        switch (pkt->type)
+        switch (pkt->operationCode)
         {
         case 2:
-                ESP_LOGI(TAG, "收到普通数据：%s", (char *)(pkt->payload));
-                outpkt.type = 3;
-                esp_now_send(srcMac, (uint8_t *)&outpkt, sizeof(outpkt));
+                ESP_LOGI(TAG, "收到普通数据：%s", (char *)(pkt->operationData));
+                outpkt.operationCode = 3;
+                // ack Package
+                // esp_now_send(srcMac, (uint8_t *)&outpkt, sizeof(outpkt));
                 break;
         case 3:
                 ESP_LOGI(TAG, "ACK");
@@ -133,22 +133,23 @@ static void SendImg(void *pvParameters)
 {
 
         uint8_t *mac = (uint8_t *)pvParameters;
+        BodyDef_t pkt = {0};
+        uint32_t targetSize = 0;
         while (true)
         {
-                packageBody_t pkt = {0};
-                pkt.type = 2;
-                pkt.packageId = 0;
-                memcpy(pkt.payload, "GETGETGET12313123123", 21);
+
+                pkt.operationCode = SEND_IMG;
                 esp_now_send(mac, (uint8_t *)&pkt, sizeof(pkt));
-                if (ACKFlag == true)
-                {
-                        ACKFlag = false;
-                        break;
-                }
-                else
-                {
-                        vTaskDelay(SEND_INTERVAL / portTICK_PERIOD_MS);
-                }
+
+                // if (ACKFlag == true)
+                // {
+                //         ACKFlag = false;
+                //         break;
+                // }
+                // else
+                // {
+                //         vTaskDelay(SEND_INTERVAL / portTICK_PERIOD_MS);
+                // }
         }
         vTaskDelete(NULL);
 }
@@ -186,12 +187,9 @@ static void BroadcastTask(void *arg)
 {
         while (1)
         {
-                packageBody_t pkt = {0};
-                pkt.type = 0;
-                memcpy(pkt.payload, "DISCOVER", 9);
-
+                BodyDef_t pkt = {0};
+                pkt.operationCode = 0;
                 esp_err_t err = esp_now_send(broadcastMac, (uint8_t *)&pkt, sizeof(pkt));
-
                 if (err != ESP_OK)
                 {
                         ESP_LOGE(TAG, "广播发送失败");
@@ -217,4 +215,60 @@ void StartEspNow(void)
         InitEspNow();
 
         xTaskCreate(BroadcastTask, "BroadcastTask", 2048, NULL, 4, NULL);
+}
+
+int8_t NowMessageProcesser(BodyDef_t *bodyMessage)
+{
+        if (bodyMessage == NULL)
+        {
+                return -1;
+        }
+        switch (bodyMessage->operationCode)
+        {
+        case IMG_DATAHEAD:
+                memcpy(&selfImgSize, bodyMessage->operationData + sizeof(uint8_t), sizeof(selfImgSize));
+
+                // 尝试释放旧的
+                if (selfImgPtr == NULL)
+                {
+                        free(selfImgPtr);
+                        selfImgPtr = NULL;
+                }
+
+                // 重新获取新的
+                selfImgPtr = (uint8_t *)heap_caps_malloc(selfImgSize, MALLOC_CAP_SPIRAM);
+                if (selfImgPtr == NULL)
+                {
+                        ESP_LOGE(TAG, "malloc selfImgPtr failed, size: %d. At pos: %s %d", selfImgSize, __FILENAME__, __LINE__); // 操 是不是没开SPIRAM
+                        return -1;
+                }
+                else
+                {
+                        ESP_LOGI(TAG, "malloc selfImgPtr success, size: %d", selfImgSize);
+                }
+                break;
+        case IMG_DATABODY:
+                uint32_t currentOffset = 0;
+                memcpy(&currentOffset, bodyMessage->operationData, sizeof(uint32_t));
+                if (bodyMessage->operationSize < sizeof(uint32_t))
+                {
+                        ESP_LOGE(TAG, "Valid Position. At pos: %s %d", __FILENAME__, __LINE__);
+                        return -1;
+                }
+                // 我会一直监视你的
+                if (currentOffset + bodyMessage->operationSize - sizeof(uint32_t) > selfImgSize)
+                {
+                        ESP_LOGE(TAG, "Valid Offset. At pos: %s %d", __FILENAME__, __LINE__);
+                        return -1;
+                }
+                memcpy(selfImgPtr + currentOffset,
+                       bodyMessage->operationData + sizeof(uint32_t),
+                       bodyMessage->operationSize - sizeof(uint32_t));
+                break;
+        case IMG_DATATAIL:
+                // printHex(selfImgPtr, selfImgSize);
+                break;
+        }
+
+        return 0;
 }

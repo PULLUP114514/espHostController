@@ -8,11 +8,11 @@
  *                                 |    Package ID    |  Operation Code  |  Operation size   |   Operation Data   |
  *                                 |      uint 32     |      uint 8      |      uint 16      |    unsigned char   |
  *                                 +------------------+------------------+-------------------+--------------------+
- *                                     Not yet used                                |             512 Bytes (Max)
+ *                                       Reserved                                  |             512 Bytes (Max)
  *                                 ^                                               |                    ^         ^
  *                                 |                                               +--------------------+         |
  *                                 +-------------------------------CRC Protected----------------------------------+
- * Operation Code 见枚举
+ *  Operation Code 见枚举
  */
 
 #include "driver/uart.h"
@@ -191,6 +191,8 @@ void F1CControlUartListener(void *pvParameters)
                                 else
                                 {
                                         ESP_LOGE(TAG, "CRC FAILED: excetped is : %02X, but got: %02X", crcCalc, crcCode);
+                                        memset(&bodyPackage, 0, sizeof(BodyDef_t));
+                                        bodyOperationDataCount = 0;
                                         status = HEAD0;
                                 }
 
@@ -270,7 +272,7 @@ int8_t UartMessageProcesser(BodyDef_t *bodyMessage)
                        bodyMessage->operationSize - sizeof(uint32_t));
                 break;
         case IMG_DATATAIL:
-                // printHex(selfImgPtr, selfImgSize);
+                ESP_LOGI(TAG, "Get selfImg Success");
                 break;
         }
 
@@ -321,12 +323,12 @@ void UartSender(const uint8_t operationCode, const uint16_t operationSize, const
 
 void StartUart(void)
 {
-        const int uart_buffer_size = (1024 * 2);
+        const int uart_buffer_size = 1024;
         QueueHandle_t uart_queue;
         ESP_ERROR_CHECK(uart_driver_install(UART_PORT, uart_buffer_size, uart_buffer_size, 10, &uart_queue, 0));
 
         uart_config_t uart_config = {
-            .baud_rate = 115200,
+            .baud_rate = 512000,
             .data_bits = UART_DATA_8_BITS,
             .parity = UART_PARITY_DISABLE,
             .stop_bits = UART_STOP_BITS_1,

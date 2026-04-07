@@ -4,7 +4,7 @@ import time
 
 # 串口配置
 SERIAL_PORT = "COM33"  # 根据实际修改
-BAUDRATE = 115200
+BAUDRATE = 512000
 
 # 协议常量
 HEAD0 = 0xAA
@@ -12,7 +12,7 @@ HEAD1 = 0x55
 TAIL0 = 0x0D
 TAIL1 = 0x07
 
-MAX_CHUNK = 128
+MAX_CHUNK = 230
 
 # 操作码
 IMG_DATAHEAD = 2
@@ -61,7 +61,12 @@ def print_hex(prefix: str, data: bytes):
     print(f"{prefix} [{len(data)}]: {hex_str}")
 
 
+import time
+
+
 def send_image(ser, filepath):
+    start_time = time.perf_counter()  # 记录开始时间
+
     with open(filepath, "rb") as f:
         img = f.read()
 
@@ -69,11 +74,8 @@ def send_image(ser, filepath):
     print(f"Image size: {size}")
 
     # --- 1. 发送 HEAD ---
-    # uint8 类型 + uint32 size
-    # 类型：0=图片\
     head_data = struct.pack("<b i", 0, size)
     pkt = build_packet(IMG_DATAHEAD, head_data)
-    # print_hex("TX", pkt)
     ser.write(pkt)
 
     if not wait_ack(ser, 255):
@@ -88,20 +90,25 @@ def send_image(ser, filepath):
         body_data = struct.pack("<i", offset) + chunk
         pkt = build_packet(IMG_DATABODY, body_data)
 
-        # print_hex("TX", pkt)
-        ser.write(pkt)
-
-        if not wait_ack(ser, 255):
-            print(f"BODY failed at offset {offset}")
-            return
+        while True:
+            ser.write(pkt)
+            if wait_ack(ser, 255):
+                break
+            print_hex("TX", pkt)
 
         offset += len(chunk)
         print(f"Sent {offset}/{size}")
+
     # --- 3. 发送 TAIL ---
     pkt = build_packet(IMG_DATATAIL, b"")
     ser.write(pkt)
 
+    end_time = time.perf_counter()
+    total_time = end_time - start_time
+    speed = size / total_time  # 字节/秒
     print("Send complete")
+    print(f"Total time: {total_time:.3f} s")
+    print(f"Speed: {speed/1024*8:.2f} Kbit/s")
 
 
 ACK_VALUE = 255
@@ -157,7 +164,7 @@ def print_rx(data: bytes, prefix="RX"):
 
 
 if __name__ == "__main__":
-    ser = serial.Serial(SERIAL_PORT, BAUDRATE, timeout=1)
+    ser = serial.Serial(SERIAL_PORT, BAUDRATE, timeout=1, write_timeout=1)
     ser.set_buffer_size(rx_size=4096, tx_size=4096)
     try:
         send_image(ser, "./data.jpg")

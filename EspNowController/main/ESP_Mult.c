@@ -41,5 +41,5 @@ void app_main(void)
     esp_task_wdt_deinit();
     check_psram();
     StartUart();
-    StartEspNow();
+    // StartEspNow();
 }

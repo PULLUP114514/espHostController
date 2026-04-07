@@ -20,12 +20,12 @@ typedef enum
         ACK = 255                // NULL                                /                                                       通用ACK
 } OPERATION_CODE_ENUM;
 
-typedef struct
-{
-        uint8_t type; // 0=广播  1=单播
-        uint32_t packageId;
-        uint8_t payload[64];
-} packageBody_t;
+// typedef struct
+// {
+//         uint8_t operationCode; // 0=广播  1=单播
+//         uint32_t packageId;
+//         uint8_t payload[64];
+// } packageBody_t;
 
 // 状态机读取状态
 typedef enum
