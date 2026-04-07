@@ -416,5 +416,4 @@ FodyWeavers.xsd
 *.msix
 *.msm
 *.msp
-UartIpcController
-UartIpcController
+UartIpcController/py/venv/

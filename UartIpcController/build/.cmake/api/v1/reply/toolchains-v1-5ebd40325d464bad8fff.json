@@ -1,0 +1,108 @@
+{
+	"kind" : "toolchains",
+	"toolchains" : 
+	[
+		{
+			"compiler" : 
+			{
+				"id" : "GNU",
+				"implicit" : 
+				{
+					"includeDirectories" : 
+					[
+						"/home/bsodwtpc/myFiles/Proj/ePass/buildroot/output/host/lib/gcc/arm-buildroot-linux-gnueabi/8.4.0/include",
+						"/home/bsodwtpc/myFiles/Proj/ePass/buildroot/output/host/lib/gcc/arm-buildroot-linux-gnueabi/8.4.0/include-fixed",
+						"/home/bsodwtpc/myFiles/Proj/ePass/buildroot/output/host/arm-buildroot-linux-gnueabi/include",
+						"/home/bsodwtpc/myFiles/Proj/ePass/buildroot/output/host/arm-buildroot-linux-gnueabi/sysroot/usr/include"
+					],
+					"linkDirectories" : 
+					[
+						"/home/bsodwtpc/myFiles/Proj/ePass/buildroot/output/host/lib/gcc/arm-buildroot-linux-gnueabi/8.4.0",
+						"/home/bsodwtpc/myFiles/Proj/ePass/buildroot/output/host/arm-buildroot-linux-gnueabi/lib",
+						"/home/bsodwtpc/myFiles/Proj/ePass/buildroot/output/host/arm-buildroot-linux-gnueabi/sysroot/lib",
+						"/home/bsodwtpc/myFiles/Proj/ePass/buildroot/output/host/arm-buildroot-linux-gnueabi/sysroot/usr/lib"
+					],
+					"linkFrameworkDirectories" : [],
+					"linkLibraries" : 
+					[
+						"gcc",
+						"gcc_s",
+						"c",
+						"gcc",
+						"gcc_s"
+					]
+				},
+				"path" : "/home/bsodwtpc/myFiles/Proj/ePass/buildroot/output/host/bin/arm-buildroot-linux-gnueabi-gcc",
+				"version" : "8.4.0"
+			},
+			"language" : "C",
+			"sourceFileExtensions" : 
+			[
+				"c",
+				"m"
+			]
+		},
+		{
+			"compiler" : 
+			{
+				"id" : "GNU",
+				"implicit" : 
+				{
+					"includeDirectories" : 
+					[
+						"/home/bsodwtpc/myFiles/Proj/ePass/buildroot/output/host/arm-buildroot-linux-gnueabi/include/c++/8.4.0",
+						"/home/bsodwtpc/myFiles/Proj/ePass/buildroot/output/host/arm-buildroot-linux-gnueabi/include/c++/8.4.0/arm-buildroot-linux-gnueabi",
+						"/home/bsodwtpc/myFiles/Proj/ePass/buildroot/output/host/arm-buildroot-linux-gnueabi/include/c++/8.4.0/backward",
+						"/home/bsodwtpc/myFiles/Proj/ePass/buildroot/output/host/lib/gcc/arm-buildroot-linux-gnueabi/8.4.0/include",
+						"/home/bsodwtpc/myFiles/Proj/ePass/buildroot/output/host/lib/gcc/arm-buildroot-linux-gnueabi/8.4.0/include-fixed",
+						"/home/bsodwtpc/myFiles/Proj/ePass/buildroot/output/host/arm-buildroot-linux-gnueabi/include",
+						"/home/bsodwtpc/myFiles/Proj/ePass/buildroot/output/host/arm-buildroot-linux-gnueabi/sysroot/usr/include"
+					],
+					"linkDirectories" : 
+					[
+						"/home/bsodwtpc/myFiles/Proj/ePass/buildroot/output/host/lib/gcc/arm-buildroot-linux-gnueabi/8.4.0",
+						"/home/bsodwtpc/myFiles/Proj/ePass/buildroot/output/host/arm-buildroot-linux-gnueabi/lib",
+						"/home/bsodwtpc/myFiles/Proj/ePass/buildroot/output/host/arm-buildroot-linux-gnueabi/sysroot/lib",
+						"/home/bsodwtpc/myFiles/Proj/ePass/buildroot/output/host/arm-buildroot-linux-gnueabi/sysroot/usr/lib"
+					],
+					"linkFrameworkDirectories" : [],
+					"linkLibraries" : 
+					[
+						"stdc++",
+						"m",
+						"gcc_s",
+						"gcc",
+						"c",
+						"gcc_s",
+						"gcc"
+					]
+				},
+				"path" : "/home/bsodwtpc/myFiles/Proj/ePass/buildroot/output/host/bin/arm-buildroot-linux-gnueabi-g++",
+				"version" : "8.4.0"
+			},
+			"language" : "CXX",
+			"sourceFileExtensions" : 
+			[
+				"C",
+				"M",
+				"c++",
+				"cc",
+				"cpp",
+				"cxx",
+				"mm",
+				"mpp",
+				"CPP",
+				"ixx",
+				"cppm",
+				"ccm",
+				"cxxm",
+				"c++m"
+			]
+		}
+	],
+	"version" : 
+	{
+		"major" : 1,
+		"minor" : 0
+	}
+}

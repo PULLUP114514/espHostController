@@ -1,0 +1,4 @@
+/home/bsodwtpc/myFiles/Proj/ePass/App/UartIpcController/CMakeFiles/my_lib.dir
+/home/bsodwtpc/myFiles/Proj/ePass/App/UartIpcController/CMakeFiles/UartController.dir
+/home/bsodwtpc/myFiles/Proj/ePass/App/UartIpcController/CMakeFiles/edit_cache.dir
+/home/bsodwtpc/myFiles/Proj/ePass/App/UartIpcController/CMakeFiles/rebuild_cache.dir

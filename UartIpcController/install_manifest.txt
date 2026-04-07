@@ -1,0 +1,2 @@
+/home/bsodwtpc/myFiles/Proj/ePass/App/ipcController/dist/IpcController/IpcController
+/home/bsodwtpc/myFiles/Proj/ePass/App/ipcController/dist/IpcController/appconfig.json

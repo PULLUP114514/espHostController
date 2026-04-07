@@ -1,0 +1,1 @@
+/home/bsodwtpc/myFiles/Proj/ePass/buildroot/output/host/bin/arm-buildroot-linux-gnueabi-g++ --sysroot=/home/bsodwtpc/myFiles/Proj/ePass/buildroot/output/host/arm-buildroot-linux-gnueabi/sysroot -D_LARGEFILE_SOURCE -D_LARGEFILE64_SOURCE -D_FILE_OFFSET_BITS=64 -Os  -DNDEBUG CMakeFiles/IpcController.dir/src/main.c.o -o IpcController  libmy_lib.a 
