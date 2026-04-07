@@ -272,7 +272,7 @@ int8_t UartMessageProcesser(BodyDef_t *bodyMessage)
                        bodyMessage->operationSize - sizeof(uint32_t));
                 break;
         case IMG_DATATAIL:
-                ESP_LOGI(TAG, "Get selfImg Success");
+                ESP_LOGI(TAG, "Get selfImg Success. size: %ld", selfImgSize);
                 break;
         }
 
@@ -341,7 +341,7 @@ void StartUart(void)
         xTaskCreatePinnedToCore(
             F1CControlUartListener,
             "F1CControlUartListener",
-            2048,
+            8192,
             NULL,
             1,
             NULL,

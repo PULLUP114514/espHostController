@@ -77,6 +77,25 @@ static void InitWifi(void)
         esp_wifi_set_channel(CHANNEL, WIFI_SECOND_CHAN_NONE);
 }
 
+void NowPrintHex(const uint8_t *data, uint32_t size)
+{
+        if (data == NULL || size == 0)
+                return;
+
+        for (uint32_t i = 0; i < size; i++)
+        {
+                printf("%02X ", data[i]);
+                if ((i + 1) % 16 == 0)
+                {
+                        printf("\n");
+                }
+        }
+        if (size % 16 != 0)
+        {
+                printf("\n");
+        }
+}
+
 /* ===== 接收回调 ===== */
 static void ReceiveCallBack(const esp_now_recv_info_t *info, const uint8_t *data, int len)
 {
@@ -88,10 +107,13 @@ static void ReceiveCallBack(const esp_now_recv_info_t *info, const uint8_t *data
         {
                 return;
         }
+
+        ESP_LOGI(TAG, "Get package OperationCode: %d", pkt->operationCode);
+
         if (IS_BROADCAST_ADDR(info->des_addr))
         {
                 /* 回发广播（让对方发现自己） */
-                // ESP_LOGI(TAG, "收到广播来自: " MACSTR, MAC2STR(srcMac));
+                ESP_LOGI(TAG, "收到广播来自: " MACSTR, MAC2STR(srcMac));
                 outpkt.operationCode = NOW_DETECT;
                 esp_now_send(srcMac, (uint8_t *)&outpkt, sizeof(outpkt));
         }
@@ -103,56 +125,91 @@ static void ReceiveCallBack(const esp_now_recv_info_t *info, const uint8_t *data
         switch (pkt->operationCode)
         {
         case 2:
-                ESP_LOGI(TAG, "收到普通数据：%s", (char *)(pkt->operationData));
+                ESP_LOGI(TAG, "Get normal data: %s", (char *)(pkt->operationData));
                 outpkt.operationCode = 3;
                 // ack Package
-                // esp_now_send(srcMac, (uint8_t *)&outpkt, sizeof(outpkt));
+                esp_now_send(srcMac, (uint8_t *)&outpkt, sizeof(outpkt));
                 break;
         case 3:
                 ESP_LOGI(TAG, "ACK");
                 ACKFlag = true;
                 break;
+        case SEND_IMG:
+                ESP_LOGI(TAG, "GET img data");
+                // NowPrintHex((pkt->operationData), pkt->operationSize);
         }
 
         bool newMac = AddMac(srcMac);
         if (newMac)
         {
+                // SendImg(srcMac);
                 xTaskCreate(
-                    SendImg,       // 任务函数
-                    "SendImgTask", // 名字
-                    4096,          // 栈大小
-                    srcMac,        // 参数（传指针）
-                    5,             // 优先级
-                    NULL           // 任务句柄
-                );
+                    SendImg,
+                    "SendImgTask",
+                    4096,
+                    srcMac,
+                    5,
+                    NULL);
         }
 }
 
 /* ===== 发送扩列图 ===== */
 static void SendImg(void *pvParameters)
 {
-
         uint8_t *mac = (uint8_t *)pvParameters;
         BodyDef_t pkt = {0};
-        uint32_t targetSize = 0;
-        while (true)
+
+        // esp_now_send(mac, (uint8_t *)&pkt, 64);
+        pkt.operationCode = SEND_IMG;
+        uint32_t currentOffset = 0;
+        while (selfImgPtr == NULL)
+        {
+                vTaskDelay(100);
+        }
+        while (currentOffset < selfImgSize)
         {
 
-                pkt.operationCode = SEND_IMG;
-                esp_now_send(mac, (uint8_t *)&pkt, sizeof(pkt));
+                ESP_LOGI(TAG, "SENDING");
+                // 计算本次发送长度（处理最后一包）
+                uint16_t chunkSize = selfImgSize - currentOffset;
+                if (chunkSize > MAX_OPERATIONDATA_SIZE)
+                        chunkSize = MAX_OPERATIONDATA_SIZE;
 
-                // if (ACKFlag == true)
-                // {
-                //         ACKFlag = false;
-                //         break;
-                // }
-                // else
-                // {
-                //         vTaskDelay(SEND_INTERVAL / portTICK_PERIOD_MS);
-                // }
+                pkt.operationSize = chunkSize;
+
+                // 拷贝数据到 operationData
+                memcpy(
+                    (uint8_t *)&pkt + sizeof(uint32_t) + sizeof(uint8_t) + sizeof(uint16_t),
+                    selfImgPtr + currentOffset,
+                    chunkSize);
+
+                // 发送：注意长度 = 头 + 数据
+                uint32_t sendSize =
+                    sizeof(uint32_t) + // packageID
+                    sizeof(uint8_t) +  // operationCode
+                    sizeof(uint16_t) + // operationSize
+                    chunkSize;         // 实际数据
+
+                esp_now_send(mac, (uint8_t *)&pkt, sendSize);
+
+                currentOffset += chunkSize;
+
+                // 可选：防止发太快（ESP-NOW建议）
+                vTaskDelay(pdMS_TO_TICKS(5));
         }
+
         vTaskDelete(NULL);
 }
+
+// if (ACKFlag == true)
+// {
+//         ACKFlag = false;
+//         break;
+// }
+// else
+// {
+//         vTaskDelay(SEND_INTERVAL / portTICK_PERIOD_MS);
+// }
 
 /* ===== 发送回调 ===== */
 static void SendCallBack(const esp_now_send_info_t *info, esp_now_send_status_t status)
@@ -192,7 +249,7 @@ static void BroadcastTask(void *arg)
                 esp_err_t err = esp_now_send(broadcastMac, (uint8_t *)&pkt, sizeof(pkt));
                 if (err != ESP_OK)
                 {
-                        ESP_LOGE(TAG, "广播发送失败");
+                        ESP_LOGE(TAG, "广播发送失败: %s", esp_err_to_name(err));
                 }
 
                 vTaskDelay(SEND_INTERVAL / portTICK_PERIOD_MS);

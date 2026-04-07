@@ -58,7 +58,7 @@ extern uint32_t selfImgSize;
 extern uint32_t otherImgSize;
 extern uint8_t *otherImgPtr;
 
-#define MAX_OPERATIONDATA_SIZE 512
+#define MAX_OPERATIONDATA_SIZE 512 // 适用于ESP-NOW
 
 #pragma pack(push, 1) // 紧凑 1字节对齐
 
