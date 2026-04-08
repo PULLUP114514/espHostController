@@ -165,15 +165,19 @@ void F1CControlUartListener(void *pvParameters)
                                 }
                                 break;
                         case BODY_PAYLOAD:
-                                if (7 + bodyOperationDataCount > MAX_OPERATIONDATA_SIZE - 1)
+                                if (7 + bodyOperationDataCount >= MAX_OPERATIONDATA_SIZE)
                                 {
                                         status = HEAD0;
                                 }
-                                ((uint8_t *)&bodyPackage)[7 + bodyOperationDataCount] = data[i];
-                                bodyOperationDataCount++;
+                                uint32_t exceptRemain = bodyPackage.operationSize - bodyOperationDataCount;
+                                uint32_t quickCopySize = (exceptRemain < (len - i)) ? exceptRemain : (len - i);
+                                memcpy((uint8_t *)&bodyPackage + 7 + bodyOperationDataCount, data + i, quickCopySize);
+                                bodyOperationDataCount += quickCopySize;
+                                i += quickCopySize;
                                 if (bodyOperationDataCount >= bodyPackage.operationSize)
                                 {
                                         status = CRC0;
+                                        i--;
                                 }
                                 break;
                         case CRC0:

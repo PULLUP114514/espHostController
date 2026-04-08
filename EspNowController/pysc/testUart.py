@@ -79,6 +79,7 @@ def send_image(ser, filepath):
     ser.write(pkt)
 
     if not wait_ack(ser, 255):
+        print_hex("TX", pkt)
         print("HEAD failed")
         return
 
